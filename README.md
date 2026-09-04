@@ -6,11 +6,13 @@ It complements [PyDMD](https://github.com/PyDMD/PyDMD): PyDMD provides a broad c
 
 ## Methods
 
-- `EKFDMD`: EKF-DMD with a sparse augmented-state Jacobian.
-- `EKFDMDc`: EKF-DMD with known control input.
-- `SlidingWindowDMD`: DMD over overlapping time windows.
-- `SlidingWindowDMDc`: sliding-window DMD with control.
-- `OnlineDMD`: recursive least-squares online DMD with a forgetting factor.
+| Solver | Input | Main parameters | Purpose |
+| --- | --- | --- | --- |
+| `EKFDMD` | `X: (n, T)` | `state_noise`, `operator_noise`, `measurement_noise`, `rank` | EKF-based simultaneous state filtering and operator estimation |
+| `EKFDMDc` | `X: (n, T)`, `U: (m, T)` | same as `EKFDMD` | EKF-DMD with a known control input and estimated `A, B` |
+| `SlidingWindowDMD` | `X: (n, T)` | `window_size`, `svd_rank` | independent DMD fits on overlapping windows |
+| `SlidingWindowDMDc` | `X: (n, T)`, `U: (m, T)` | `window_size`, `svd_rank` | sliding-window DMD with control |
+| `OnlineDMD` | `X: (n, T)` | `rho`, `initial_covariance` | recursive least-squares DMD with exponential forgetting |
 
 ## Installation
 
@@ -33,7 +35,7 @@ model = EKFDMD(
     state_noise=1e-3,
     measurement_noise=1e-2,
     operator_noise=0.0,
-).fit(X)  # X.shape == (n_features, n_snapshots)
+).fit(X)
 
 A_t = model.operators
 lambdas_t = model.eigs
@@ -73,8 +75,6 @@ When `EKFDMDc(initialize_with_dmd=False)` is used, the initial state operator is
 
 ## Mode tracking
 
-Time-varying modes can be reordered consistently with MAC-based tracking:
-
 ```python
 from ekfdmd.postprocess import track_modes
 
@@ -82,6 +82,17 @@ tracked_eigs, tracked_modes = track_modes(model.eigs, model.modes)
 ```
 
 `track_modes(eigs, modes)` expects fixed-shape histories `(steps, modes)` and `(steps, features, modes)`. The final snapshot defines the reference ordering, and adjacent mode matrices are matched backward in time by maximizing the modal assurance criterion (MAC).
+
+## References
+
+The implementation author and the authors of the underlying algorithms are distinct. Cite the software itself using `CITATION.cff`; cite the relevant method paper when reporting scientific results.
+
+- T. Nonomura, H. Shibata, and R. Takaki, “Extended-Kalman-filter-based dynamic mode decomposition for simultaneous system identification and denoising,” *PLoS ONE*, 14(2), e0209836, 2019. https://doi.org/10.1371/journal.pone.0209836
+- J. L. Proctor, S. L. Brunton, and J. N. Kutz, “Dynamic Mode Decomposition with Control,” *SIAM Journal on Applied Dynamical Systems*, 15(1), 142–161, 2016. https://doi.org/10.1137/15M1013857
+- H. Zhang, C. W. Rowley, E. A. Deem, and L. N. Cattafesta, “Online Dynamic Mode Decomposition for Time-Varying Systems,” *SIAM Journal on Applied Dynamical Systems*, 18(3), 1586–1609, 2019. https://doi.org/10.1137/18M1192329
+- P. J. Schmid, “Dynamic mode decomposition of numerical and experimental data,” *Journal of Fluid Mechanics*, 656, 5–28, 2010. https://doi.org/10.1017/S0022112010001217
+
+`EKFDMDc` combines the EKF-DMD formulation with a DMD-with-control state equation; this package does not claim a separate original EKFDMDc algorithm publication. `SlidingWindowDMD` applies standard DMD independently to overlapping windows rather than introducing a new DMD formulation.
 
 ## Scope
 
