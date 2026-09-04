@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: python -m venv .venv
+      - run: .venv/bin/python -m pip install .
+      - run: .venv/bin/python -m unittest discover -s tests
+
+  numba:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - run: python -m venv .venv
+      - run: .venv/bin/python -m pip install '.[numba]'
+      - run: .venv/bin/python -m unittest tests.test_core.CoreTests.test_online_numba_matches_python_kernel
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - run: python -m pip install build
+      - run: python -m build
+      - run: python -m venv /tmp/ekfdmd-smoke
+      - run: /tmp/ekfdmd-smoke/bin/python -m pip install dist/*.whl
+      - name: Smoke test wheel
+        run: |
+          /tmp/ekfdmd-smoke/bin/python - <<'PY'
+          import numpy as np
+          from ekfdmd import EKFDMD
+
+          X = np.array([[1.0, 0.9, 0.81, 0.729]])
+          model = EKFDMD().fit(X)
+          assert model.operator.shape == (1, 1)
+          PY
