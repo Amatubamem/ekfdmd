@@ -71,6 +71,9 @@ class CoreTests(unittest.TestCase):
         ).fit(X, U)
 
         # Regression values from dmdnn.dmd.EKFDMDc (sparse implementation).
+        # The comparison uses DMD initialization. The legacy no-DMD path used
+        # B=I whereas ekfdmd intentionally starts B=0; that API choice is
+        # covered separately by the public-contract work.
         expected_A = np.array(
             [[0.949093646566917, -0.033816941228443], [0.029472884226107, 0.942182019154442]]
         )
