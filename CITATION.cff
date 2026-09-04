@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata below and cite the relevant algorithm paper listed in the README."
+title: "ekfdmd"
+type: software
+version: 0.1.0
+authors:
+  - family-names: Asano
+    given-names: Kotaro
+repository-code: "https://github.com/Amatubamem/ekfdmd"
+license: MIT
