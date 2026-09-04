@@ -78,9 +78,14 @@ class SlidingWindowDMD:
             for i in range(X.shape[1] - self.window_size + 1)
         ]
         self.operators = np.stack([fit[0] for fit in fits])
-        # Ranks can vary between windows when svd_rank=None, so spectra remain tuples.
-        self.eigs = tuple(fit[1] for fit in fits)
-        self.modes = tuple(fit[2] for fit in fits)
+        eigs = tuple(fit[1] for fit in fits)
+        modes = tuple(fit[2] for fit in fits)
+        if self.svd_rank is None:
+            # ponytail: numerical rank may change by window; preserve each result
+            # rather than padding. Specify svd_rank when a fixed-rank history is needed.
+            self.eigs, self.modes = eigs, modes
+        else:
+            self.eigs, self.modes = np.stack(eigs), np.stack(modes)
         self.operator = self.operators[-1]
         return self
 
