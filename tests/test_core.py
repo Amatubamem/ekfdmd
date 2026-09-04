@@ -117,9 +117,9 @@ class CoreTests(unittest.TestCase):
         A = rotation(0.05)
         X = trajectory(A, np.array([1.0, 0.3]), 40)
         compiled = _online_core(X, 0.97, 1e4, True)
-        python = _online_core.py_func(X, 0.97, 1e4, True)
-        np.testing.assert_allclose(compiled[0], python[0])
-        np.testing.assert_allclose(compiled[1], python[1])
+        interpreted = _online_core.py_func(X, 0.97, 1e4, True)
+        np.testing.assert_allclose(compiled[0], interpreted[0])
+        np.testing.assert_allclose(compiled[1], interpreted[1])
 
     def test_track_modes_uses_mac_across_permutations_and_phase(self):
         first, second = 0.9 + 0.1j, 0.8 + 0.2j
