@@ -61,8 +61,8 @@ class EKFDMD:
 
         operators = np.empty((steps, n, n), dtype=reduced.dtype)
         filtered = np.empty((n, steps), dtype=reduced.dtype)
-        predictions = np.empty((n, steps), dtype=reduced.dtype)
-        operators[0], filtered[:, 0], predictions[:, 0] = A, x, x
+        predicted = np.empty((n, steps), dtype=reduced.dtype)
+        operators[0], filtered[:, 0], predicted[:, 0] = A, x, x
 
         for k in range(1, steps):
             x_pred = A @ x
@@ -79,11 +79,11 @@ class EKFDMD:
             A = A + delta[n:].reshape(n, n)
             P = P_pred - K @ cross.T.conj()
             P = 0.5 * (P + P.T.conj())
-            operators[k], filtered[:, k], predictions[:, k] = A, x, x_pred
+            operators[k], filtered[:, k], predicted[:, k] = A, x, x_pred
 
         self.operators = np.einsum("ij,tjk,lk->til", projection, operators, projection.conj())
         self.filtered_data = projection @ filtered
-        self.predictions = projection @ predictions
+        self.predicted_data = projection @ predicted
         self.eigs, reduced_modes = np.linalg.eig(operators)
         self.modes = np.einsum("ij,tjk->tik", projection, reduced_modes)
         self.operator = self.operators[-1]
@@ -125,8 +125,8 @@ class EKFDMDc(EKFDMD):
         operators = np.empty((steps, n, n), dtype=reduced.dtype)
         controls = np.empty((steps, n, m), dtype=reduced.dtype)
         filtered = np.empty((n, steps), dtype=reduced.dtype)
-        predictions = np.empty((n, steps), dtype=reduced.dtype)
-        operators[0], controls[0], filtered[:, 0], predictions[:, 0] = A, B, x, x
+        predicted = np.empty((n, steps), dtype=reduced.dtype)
+        operators[0], controls[0], filtered[:, 0], predicted[:, 0] = A, B, x, x
 
         for k in range(1, steps):
             u = U[:, k - 1]
@@ -149,12 +149,12 @@ class EKFDMDc(EKFDMD):
             B = B + delta[n + n * n :].reshape(n, m)
             P = P_pred - K @ cross.T.conj()
             P = 0.5 * (P + P.T.conj())
-            operators[k], controls[k], filtered[:, k], predictions[:, k] = A, B, x, x_pred
+            operators[k], controls[k], filtered[:, k], predicted[:, k] = A, B, x, x_pred
 
         self.operators = np.einsum("ij,tjk,lk->til", projection, operators, projection.conj())
         self.control_operators = np.einsum("ij,tjk->tik", projection, controls)
         self.filtered_data = projection @ filtered
-        self.predictions = projection @ predictions
+        self.predicted_data = projection @ predicted
         self.eigs, reduced_modes = np.linalg.eig(operators)
         self.modes = np.einsum("ij,tjk->tik", projection, reduced_modes)
         self.operator = self.operators[-1]
