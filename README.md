@@ -4,6 +4,10 @@
 
 It complements [PyDMD](https://github.com/PyDMD/PyDMD): PyDMD provides a broad collection of DMD variants, while this package focuses on EKF-based and sequential operator estimation.
 
+## Quickstart
+
+See [`examples/nonomura_2019.ipynb`](examples/nonomura_2019.ipynb) for a reproducible implementation of the small-DoF numerical experiment in Section 4.1 of Nonomura, Shibata, and Takaki (2019).
+
 ## Methods
 
 | Solver | Input | Main parameters | Purpose |
