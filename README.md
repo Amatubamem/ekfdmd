@@ -27,15 +27,13 @@ pip install 'ekfdmd[numba]'
 ## Usage
 
 ```python
-import numpy as np
 from ekfdmd import EKFDMD
 
 model = EKFDMD(
     state_noise=1e-3,
     measurement_noise=1e-2,
     operator_noise=0.0,
-)
-model.fit(X)  # X.shape == (n_features, n_snapshots)
+).fit(X)  # X.shape == (n_features, n_snapshots)
 
 A_t = model.operators
 lambdas_t = model.eigs
@@ -52,6 +50,29 @@ model = EKFDMDc().fit(X, U)
 x_next = model.predict(X[:, -1], U[:, -1])
 ```
 
+`predict()` always means one-step prediction with the final fitted operator. It does not perform reconstruction or filtering.
+
+## Public data contract
+
+Let `n` be the full state dimension, `r` the reduced/modal dimension, `m` the control dimension, `T` the number of snapshots, and `W` the number of sliding windows.
+
+| Attribute | Meaning | Shape |
+| --- | --- | --- |
+| `operator` | final state operator | `(n, n)` |
+| `operators` | operator history | `(T, n, n)` for EKF/Online, `(W, n, n)` for sliding-window methods |
+| `control_operator` | final control operator | `(n, m)` |
+| `control_operators` | control-operator history | `(T, n, m)` for EKFDMDc, `(W, n, m)` for SlidingWindowDMDc |
+| `eigs` | eigenvalue history | `(T, r)` or `(W, r)` when fixed-rank |
+| `modes` | mode history | `(T, n, r)` or `(W, n, r)` when fixed-rank |
+| `predicted_data` | causal one-step prior during `fit()` | `(n, T)`; EKFDMD/EKFDMDc/OnlineDMD only |
+| `filtered_data` | EKF posterior state history | `(n, T)`; EKFDMD/EKFDMDc only |
+
+`SlidingWindowDMD(svd_rank=None)` deliberately allows the numerical rank to vary by window, so `eigs` and `modes` are tuples of per-window arrays. Set `svd_rank` to obtain fixed-shape arrays suitable for mode tracking. `SlidingWindowDMDc` reports eigenpairs of each full state operator, so its modal dimension is always `n`.
+
+When `EKFDMDc(initialize_with_dmd=False)` is used, the initial state operator is identity and the initial control operator is zero.
+
+## Mode tracking
+
 Time-varying modes can be reordered consistently with MAC-based tracking:
 
 ```python
@@ -60,7 +81,7 @@ from ekfdmd.postprocess import track_modes
 tracked_eigs, tracked_modes = track_modes(model.eigs, model.modes)
 ```
 
-`track_modes` uses the final snapshot as the reference ordering and matches adjacent mode matrices backward in time with the modal assurance criterion (MAC).
+`track_modes(eigs, modes)` expects fixed-shape histories `(steps, modes)` and `(steps, features, modes)`. The final snapshot defines the reference ordering, and adjacent mode matrices are matched backward in time by maximizing the modal assurance criterion (MAC).
 
 ## Scope
 
