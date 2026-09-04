@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ekfdmd"
+version = "0.1.0"
+description = "Extended Kalman filter and sequential variants of Dynamic Mode Decomposition"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [{ name = "Kotaro Asano" }]
+dependencies = [
+    "numpy>=2.2",
+    "scipy>=1.16",
+]
+
+[project.optional-dependencies]
+numba = ["numba>=0.63"]
+
+[project.urls]
+Repository = "https://github.com/Amatubamem/ekfdmd"
+
+[tool.setuptools.packages.find]
+where = ["src"]
