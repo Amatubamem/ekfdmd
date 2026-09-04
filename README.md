@@ -52,6 +52,16 @@ model = EKFDMDc().fit(X, U)
 x_next = model.predict(X[:, -1], U[:, -1])
 ```
 
+Time-varying modes can be reordered consistently with MAC-based tracking:
+
+```python
+from ekfdmd.postprocess import track_modes
+
+tracked_eigs, tracked_modes = track_modes(model.eigs, model.modes)
+```
+
+`track_modes` uses the final snapshot as the reference ordering and matches adjacent mode matrices backward in time with the modal assurance criterion (MAC).
+
 ## Scope
 
 This package intentionally does not include plotting, neural-network integrations, experiment management, or general data utilities. PyDMD remains the recommended package when EKF or sequential estimation is not required.

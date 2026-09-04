@@ -3,6 +3,7 @@ import unittest
 import numpy as np
 
 from ekfdmd import EKFDMD, EKFDMDc, OnlineDMD, SlidingWindowDMD, SlidingWindowDMDc
+from ekfdmd.postprocess import track_modes
 
 
 def trajectory(A, x0, steps, B=None, U=None):
@@ -50,6 +51,24 @@ class CoreTests(unittest.TestCase):
         X = trajectory(A, np.array([1.0, 0.4]), 200)
         model = OnlineDMD(initial_covariance=1e8).fit(X)
         np.testing.assert_allclose(model.operator, A, atol=2e-3)
+
+    def test_track_modes_uses_mac_across_permutations_and_phase(self):
+        first, second = 0.9 + 0.1j, 0.8 + 0.2j
+        eigs = np.array([[first, second], [second, first], [first, second]])
+        modes = np.array(
+            [
+                [[1, 0], [0, 1]],
+                [[0, -1], [1, 0]],
+                [[1j, 0], [0, 1]],
+            ],
+            dtype=complex,
+        )
+
+        tracked_eigs, tracked_modes = track_modes(eigs, modes)
+
+        np.testing.assert_allclose(tracked_eigs, np.tile([first, second], (3, 1)))
+        np.testing.assert_allclose(np.abs(tracked_modes[:, :, 0]), np.tile([[1, 0]], (3, 1)))
+        np.testing.assert_allclose(np.abs(tracked_modes[:, :, 1]), np.tile([[0, 1]], (3, 1)))
 
 
 if __name__ == "__main__":
