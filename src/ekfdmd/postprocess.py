@@ -3,6 +3,8 @@
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 
+__all__ = ["track_modes"]
+
 
 def track_modes(eigs: np.ndarray, modes: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Track time-varying modes by maximizing the modal assurance criterion (MAC).
