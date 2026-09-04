@@ -25,18 +25,18 @@ def _online_core(X: np.ndarray, rho: float, gamma: float, identity: bool) -> tup
     A = np.eye(n, dtype=X.dtype) if identity else np.zeros((n, n), dtype=X.dtype)
     P = np.eye(n, dtype=X.dtype) * gamma
     operators = np.empty((steps, n, n), dtype=X.dtype)
-    predictions = np.empty((steps, n), dtype=X.dtype)
-    operators[0], predictions[0] = A, samples[0]
+    predicted = np.empty((steps, n), dtype=X.dtype)
+    operators[0], predicted[0] = A, samples[0]
     for k in range(1, steps):
         x, y = samples[k - 1], samples[k]
-        predictions[k] = A @ x
+        predicted[k] = A @ x
         px = P @ x
         gain = px / (rho + np.vdot(x, px))
         A = A + np.outer(y - A @ x, gain.conj())
         P = (P - np.outer(gain, px.conj())) / rho
         P = 0.5 * (P + P.T.conj())
         operators[k] = A
-    return operators, predictions.T
+    return operators, predicted.T
 
 
 class OnlineDMD:
@@ -59,7 +59,7 @@ class OnlineDMD:
 
     def fit(self, X: np.ndarray) -> OnlineDMD:
         X = _snapshots(X)
-        self.operators, self.predictions = _online_core(
+        self.operators, self.predicted_data = _online_core(
             X, self.rho, self.initial_covariance, self.initialize_with_identity
         )
         self.eigs, self.modes = np.linalg.eig(self.operators)
