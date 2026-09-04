@@ -25,9 +25,15 @@ class CoreTests(unittest.TestCase):
     def test_ekfdmd_tracks_static_operator(self):
         A = np.array([[0.98, -0.08], [0.08, 0.98]])
         X = trajectory(A, np.array([1.0, 0.2]), 80)
-        model = EKFDMD(state_noise=1e-8, measurement_noise=1e-8, initialize_with_dmd=False).fit(X)
-        np.testing.assert_allclose(model.operator, A, atol=2e-3)
-        np.testing.assert_allclose(model.predict(X[:, -1]), A @ X[:, -1], atol=2e-3)
+        solver = EKFDMD(state_noise=1e-8, measurement_noise=1e-8, initialize_with_dmd=False)
+        self.assertIs(solver.fit(X), solver)
+        np.testing.assert_allclose(solver.operator, A, atol=2e-3)
+        np.testing.assert_allclose(solver.predict(X[:, -1]), A @ X[:, -1], atol=2e-3)
+        self.assertEqual(solver.operators.shape, (80, 2, 2))
+        self.assertEqual(solver.eigs.shape, (80, 2))
+        self.assertEqual(solver.modes.shape, (80, 2, 2))
+        self.assertEqual(solver.predicted_data.shape, X.shape)
+        self.assertEqual(solver.filtered_data.shape, X.shape)
 
     def test_ekfdmd_matches_legacy_sparse_reference(self):
         A = np.array([[0.97, -0.07], [0.05, 0.96]])
@@ -40,8 +46,6 @@ class CoreTests(unittest.TestCase):
             initial_covariance=50.0,
             rank=2,
         ).fit(X)
-
-        # Regression value from dmdnn.dmd.EKFDMD (sparse implementation).
         expected = np.array(
             [[0.969007280011149, -0.070036791555886], [0.046526711347818, 0.963242857370069]]
         )
@@ -52,9 +56,12 @@ class CoreTests(unittest.TestCase):
         B = np.array([[0.2]])
         U = np.sin(np.arange(80, dtype=float))[None, :]
         X = trajectory(A, np.array([0.3]), 80, B, U)
-        model = EKFDMDc(state_noise=1e-8, measurement_noise=1e-8, initialize_with_dmd=False).fit(X, U)
-        np.testing.assert_allclose(model.operator, A, atol=2e-3)
-        np.testing.assert_allclose(model.control_operator, B, atol=2e-3)
+        solver = EKFDMDc(state_noise=1e-8, measurement_noise=1e-8, initialize_with_dmd=False)
+        self.assertIs(solver.fit(X, U), solver)
+        np.testing.assert_allclose(solver.operator, A, atol=2e-3)
+        np.testing.assert_allclose(solver.control_operator, B, atol=2e-3)
+        self.assertEqual(solver.control_operators.shape, (80, 1, 1))
+        self.assertEqual(solver.predicted_data.shape, X.shape)
 
     def test_ekfdmdc_matches_legacy_sparse_reference(self):
         A = np.array([[0.95, -0.04], [0.03, 0.94]])
@@ -69,11 +76,6 @@ class CoreTests(unittest.TestCase):
             initial_covariance=50.0,
             rank=2,
         ).fit(X, U)
-
-        # Regression values from dmdnn.dmd.EKFDMDc (sparse implementation).
-        # The comparison uses DMD initialization. The legacy no-DMD path used
-        # B=I whereas ekfdmd intentionally starts B=0; that API choice is
-        # covered separately by the public-contract work.
         expected_A = np.array(
             [[0.949093646566917, -0.033816941228443], [0.029472884226107, 0.942182019154442]]
         )
@@ -86,19 +88,27 @@ class CoreTests(unittest.TestCase):
         B = np.array([[0.1]])
         U = np.cos(np.arange(20, dtype=float))[None, :]
         X = trajectory(A, np.array([1.0]), 20, B, U)
-        swc = SlidingWindowDMDc(8).fit(X, U)
+        swc = SlidingWindowDMDc(8)
+        self.assertIs(swc.fit(X, U), swc)
         np.testing.assert_allclose(swc.operator, A, atol=1e-12)
         np.testing.assert_allclose(swc.control_operator, B, atol=1e-12)
 
         autonomous = trajectory(A, np.array([1.0]), 20)
-        sw = SlidingWindowDMD(8).fit(autonomous)
+        sw = SlidingWindowDMD(8, svd_rank=1)
+        self.assertIs(sw.fit(autonomous), sw)
         np.testing.assert_allclose(sw.operator, A, atol=1e-12)
+        self.assertIsInstance(sw.eigs, np.ndarray)
+        self.assertEqual(sw.eigs.shape, (13, 1))
+        self.assertEqual(sw.modes.shape, (13, 1, 1))
+        self.assertIsInstance(SlidingWindowDMD(8).fit(autonomous).eigs, tuple)
 
     def test_online_dmd(self):
         A = np.array([[0.97, -0.04], [0.04, 0.97]])
         X = trajectory(A, np.array([1.0, 0.4]), 200)
-        model = OnlineDMD(initial_covariance=1e8).fit(X)
-        np.testing.assert_allclose(model.operator, A, atol=2e-3)
+        solver = OnlineDMD(initial_covariance=1e8)
+        self.assertIs(solver.fit(X), solver)
+        np.testing.assert_allclose(solver.operator, A, atol=2e-3)
+        self.assertEqual(solver.predicted_data.shape, X.shape)
 
     def test_online_dmd_forgetting_tracks_changed_operator(self):
         A1, A2 = rotation(0.03), rotation(0.12)
@@ -106,7 +116,6 @@ class CoreTests(unittest.TestCase):
         X[:, 0] = [1.0, 0.2]
         for k in range(160):
             X[:, k + 1] = (A1 if k < 80 else A2) @ X[:, k]
-
         static = OnlineDMD(rho=1.0, initial_covariance=1e8).fit(X)
         adaptive = OnlineDMD(rho=0.95, initial_covariance=1e8).fit(X)
         self.assertLess(np.linalg.norm(adaptive.operator - A2), np.linalg.norm(static.operator - A2))
@@ -132,9 +141,7 @@ class CoreTests(unittest.TestCase):
             ],
             dtype=complex,
         )
-
         tracked_eigs, tracked_modes = track_modes(eigs, modes)
-
         np.testing.assert_allclose(tracked_eigs, np.tile([first, second], (3, 1)))
         np.testing.assert_allclose(np.abs(tracked_modes[:, :, 0]), np.tile([[1, 0]], (3, 1)))
         np.testing.assert_allclose(np.abs(tracked_modes[:, :, 1]), np.tile([[0, 1]], (3, 1)))
