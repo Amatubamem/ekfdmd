@@ -18,6 +18,7 @@ dependencies = [
 [project.optional-dependencies]
 numba = ["numba>=0.63"]
 cuda12 = ["cupy-cuda12x[ctk]>=14.2"]
+mps = ["torch"]
 
 [project.urls]
 Repository = "https://github.com/Amatubamem/ekfdmd"
