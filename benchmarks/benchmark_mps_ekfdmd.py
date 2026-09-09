@@ -24,19 +24,26 @@ def _measure(function, repeat: int, synchronize=None) -> float:
     return statistics.median(samples)
 
 
-def _case(n: int, steps: int, repeat: int) -> tuple[float, float, float, float]:
+def _relative_error(actual: np.ndarray, expected: np.ndarray) -> float:
+    return float(np.linalg.norm(actual - expected) / np.linalg.norm(expected))
+
+
+def _case(n: int, steps: int, repeat: int) -> tuple[float, float, float, float, float, float]:
     X = np.random.default_rng(n).standard_normal((n, steps))
     kwargs = dict(state_noise=1e-3, operator_noise=1e-5, measurement_noise=2e-3)
 
-    cpu = EKFDMD(**kwargs).fit(X)
+    cpu64 = EKFDMD(**kwargs).fit(X)
+    cpu32 = MPSEKFDMD(**kwargs)._fit_device(X, torch.device("cpu"))
     mps = MPSEKFDMD(**kwargs).fit(X)
-    difference = mps.operator - cpu.operator
-    relative_frobenius_error = np.linalg.norm(difference) / np.linalg.norm(cpu.operator)
-    max_absolute_error = np.max(np.abs(difference))
+
+    mps_vs_cpu64 = _relative_error(mps.operator, cpu64.operator)
+    cpu32_vs_cpu64 = _relative_error(cpu32.operator, cpu64.operator)
+    mps_vs_cpu32 = _relative_error(mps.operator, cpu32.operator)
+    mps_vs_cpu32_max = float(np.max(np.abs(mps.operator - cpu32.operator)))
 
     cpu_time = _measure(lambda: EKFDMD(**kwargs).fit(X), repeat)
     mps_time = _measure(lambda: MPSEKFDMD(**kwargs).fit(X), repeat, torch.mps.synchronize)
-    return cpu_time, mps_time, relative_frobenius_error, max_absolute_error
+    return cpu_time, mps_time, mps_vs_cpu64, cpu32_vs_cpu64, mps_vs_cpu32, mps_vs_cpu32_max
 
 
 def main() -> None:
@@ -50,13 +57,17 @@ def main() -> None:
 
     MPSEKFDMD().fit(np.random.default_rng(0).standard_normal((2, 4)))
 
-    print("n,t,cpu_s,mps_s,speedup,relative_frobenius_error,max_absolute_error")
+    print(
+        "n,t,cpu_s,mps_s,speedup,mps_vs_cpu64_rel,cpu32_vs_cpu64_rel,"
+        "mps_vs_cpu32_rel,mps_vs_cpu32_max_abs"
+    )
     for n in (10, 20, 30, 40, 50):
         steps = 100
-        cpu_time, mps_time, relative_error, max_error = _case(n, steps, args.repeat)
+        values = _case(n, steps, args.repeat)
+        cpu_time, mps_time, mps64, cpu3264, mps32, mps32max = values
         print(
             f"{n},{steps},{cpu_time:.6f},{mps_time:.6f},{cpu_time / mps_time:.3f},"
-            f"{relative_error:.6e},{max_error:.6e}"
+            f"{mps64:.6e},{cpu3264:.6e},{mps32:.6e},{mps32max:.6e}"
         )
 
 
