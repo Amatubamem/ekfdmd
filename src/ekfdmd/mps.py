@@ -54,14 +54,16 @@ class MPSEKFDMD:
     def fit(self, X: np.ndarray) -> MPSEKFDMD:
         if not torch.backends.mps.is_available():
             raise RuntimeError("Apple MPS is not available.")
+        return self._fit_device(X, torch.device("mps"))
 
+    def _fit_device(self, X: np.ndarray, device: torch.device) -> MPSEKFDMD:
+        """Run the float32 implementation on one Torch device for validation."""
         X = _snapshots(X)
         projection = _basis(X, self.rank)
         reduced_cpu = projection.conj().T @ X
         n, steps = reduced_cpu.shape
         A_cpu = _dmd(reduced_cpu)[0] if self.initialize_with_dmd else np.eye(n, dtype=reduced_cpu.dtype)
 
-        device = torch.device("mps")
         dtype = torch.float32
         reduced = torch.as_tensor(reduced_cpu, dtype=dtype, device=device)
         A = torch.as_tensor(A_cpu, dtype=dtype, device=device)
