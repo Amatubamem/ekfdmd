@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from ekfdmd import EKFDMD, EKFDMDc, OnlineDMD, SlidingWindowDMD, SlidingWindowDMDc
+from ekfdmd import EKFDMD, EKFDMDc, OnlineDMD, RecursiveDMDc, SlidingWindowDMD, SlidingWindowDMDc
 from ekfdmd._online import _online_core
 from ekfdmd.postprocess import track_modes
 
@@ -108,6 +108,18 @@ class CoreTests(unittest.TestCase):
         solver = OnlineDMD(initial_covariance=1e8)
         self.assertIs(solver.fit(X), solver)
         np.testing.assert_allclose(solver.operator, A, atol=2e-3)
+        self.assertEqual(solver.predicted_data.shape, X.shape)
+
+    def test_recursive_dmdc(self):
+        A = np.array([[0.93]])
+        B = np.array([[0.17]])
+        U = np.sin(np.arange(200, dtype=float) * 0.37)[None, :]
+        X = trajectory(A, np.array([0.4]), 200, B, U)
+        solver = RecursiveDMDc(initial_covariance=1e8)
+        self.assertIs(solver.fit(X, U), solver)
+        np.testing.assert_allclose(solver.operator, A, atol=2e-3)
+        np.testing.assert_allclose(solver.control_operator, B, atol=2e-3)
+        self.assertEqual(solver.control_operators.shape, (200, 1, 1))
         self.assertEqual(solver.predicted_data.shape, X.shape)
 
     def test_online_dmd_forgetting_tracks_changed_operator(self):
