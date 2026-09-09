@@ -14,6 +14,7 @@ See [`examples/nonomura_2019.ipynb`](examples/nonomura_2019.ipynb) for a reprodu
 | --- | --- | --- | --- |
 | `EKFDMD` | `X: (n, T)` | `state_noise`, `operator_noise`, `measurement_noise`, `rank` | EKF-based simultaneous state filtering and operator estimation |
 | `CuPyEKFDMD` | `X: (n, T)` | same as `EKFDMD` | CUDA implementation of EKF-DMD for explicit GPU execution |
+| `MPSEKFDMD` | `X: (n, T)` | same as `EKFDMD` | float32 Apple MPS implementation of EKF-DMD for explicit GPU execution |
 | `EKFDMDc` | `X: (n, T)`, `U: (m, T)` | same as `EKFDMD` | EKF-DMD with a known control input and estimated `A, B` |
 | `SlidingWindowDMD` | `X: (n, T)` | `window_size`, `svd_rank` | independent DMD fits on overlapping windows |
 | `SlidingWindowDMDc` | `X: (n, T)`, `U: (m, T)` | `window_size`, `svd_rank` | sliding-window DMD with control |
@@ -43,6 +44,18 @@ For a source checkout, install the CUDA extra with:
 uv sync --extra cuda12
 ```
 
+Apple MPS support is optional and uses PyTorch.
+
+```sh
+uv add 'ekfdmd[mps]'
+```
+
+For a source checkout, install the MPS extra with:
+
+```sh
+uv sync --extra mps
+```
+
 ## Usage
 
 ```python
@@ -66,6 +79,18 @@ Use the CUDA backend explicitly when desired. Backend selection is not automatic
 from ekfdmd.cupy import CuPyEKFDMD
 
 model = CuPyEKFDMD(
+    state_noise=1e-3,
+    measurement_noise=1e-2,
+    operator_noise=0.0,
+).fit(X)
+```
+
+Use the Apple MPS backend explicitly on supported Macs. `MPSEKFDMD` runs the EKF update in `float32`, while the default NumPy/SciPy implementation uses `float64`. Sequential rounding differences can therefore accumulate, and MPS results are not expected to be numerically identical to `EKFDMD`. Local validation showed near-identical first-step updates, deterministic repeated MPS runs, and accumulated final-operator differences of roughly 1–2% in relative Frobenius norm for the tested 100-step cases. Performance and numerical differences depend on hardware and data.
+
+```python
+from ekfdmd.mps import MPSEKFDMD
+
+model = MPSEKFDMD(
     state_noise=1e-3,
     measurement_noise=1e-2,
     operator_noise=0.0,
