@@ -19,6 +19,7 @@ For a broader collection of DMD variants, see [PyDMD](https://github.com/PyDMD/P
 | `SlidingWindowDMD` | `X: (n, T)` | `window_size`, `svd_rank` | independent DMD fits on overlapping windows |
 | `SlidingWindowDMDc` | `X: (n, T)`, `U: (m, T)` | `window_size`, `svd_rank` | sliding-window DMD with control |
 | `OnlineDMD` | `X: (n, T)` | `rho`, `initial_covariance` | recursive least-squares DMD with exponential forgetting |
+| `RecursiveDMDc` | `X: (n, T)`, `U: (m, T)` | `rho`, `initial_covariance`, `rank` | recursive least-squares DMD with control and exponential forgetting |
 
 ## Installation
 
@@ -26,7 +27,7 @@ For a broader collection of DMD variants, see [PyDMD](https://github.com/PyDMD/P
 uv add ekfdmd
 ```
 
-Numba accelerates the Online DMD update loop:
+Numba accelerates the recursive least-squares update loops:
 
 ```sh
 uv add 'ekfdmd[numba]'
@@ -104,12 +105,21 @@ model = MPSEKFDMD(
 
 `MPSEKFDMD` performs the EKF update in `float32`. Rounding differences from the default `float64` implementation can accumulate over long sequences. [`benchmarks/benchmark_mps_ekfdmd.py`](benchmarks/benchmark_mps_ekfdmd.py) measures runtime and numerical differences on the target Mac.
 
-Controlled systems use the same `fit`-first interface:
+Controlled EKF-DMD:
 
 ```python
 from ekfdmd import EKFDMDc
 
 model = EKFDMDc().fit(X, U)
+x_next = model.predict(X[:, -1], U[:, -1])
+```
+
+Recursive least-squares DMD with control:
+
+```python
+from ekfdmd import RecursiveDMDc
+
+model = RecursiveDMDc(rho=0.99).fit(X, U)
 x_next = model.predict(X[:, -1], U[:, -1])
 ```
 
@@ -122,13 +132,13 @@ Let `n` be the full state dimension, `r` the reduced/modal dimension, `m` the co
 | Attribute | Meaning | Shape |
 | --- | --- | --- |
 | `operator` | final state operator | `(n, n)` |
-| `operators` | operator history | `(H, n, n)` for EKF-DMD methods, `(T, n, n)` for `OnlineDMD`, `(W, n, n)` for sliding-window methods |
+| `operators` | operator history | `(H, n, n)` for EKF-DMD methods, `(T, n, n)` for `OnlineDMD` and `RecursiveDMDc`, `(W, n, n)` for sliding-window methods |
 | `control_operator` | final control operator | `(n, m)` |
-| `control_operators` | control-operator history | `(H, n, m)` for `EKFDMDc`, `(W, n, m)` for `SlidingWindowDMDc` |
-| `eigs` | eigenvalue history | `(H, r)` for EKF-DMD methods, `(T, n)` for `OnlineDMD`, or `(W, r)` when fixed-rank |
-| `modes` | mode history | `(H, n, r)` for EKF-DMD methods, `(T, n, n)` for `OnlineDMD`, or `(W, n, r)` when fixed-rank |
+| `control_operators` | control-operator history | `(H, n, m)` for `EKFDMDc`, `(T, n, m)` for `RecursiveDMDc`, `(W, n, m)` for `SlidingWindowDMDc` |
+| `eigs` | eigenvalue history | `(H, r)` for EKF-DMD methods, `(T, n)` for `OnlineDMD`, `(T, r)` for `RecursiveDMDc`, or `(W, r)` when fixed-rank |
+| `modes` | mode history | `(H, n, r)` for EKF-DMD methods, `(T, n, n)` for `OnlineDMD`, `(T, n, r)` for `RecursiveDMDc`, or `(W, n, r)` when fixed-rank |
 | `history_indices` | stored EKF step indices | `(H,)` |
-| `predicted_data` | causal one-step prior during `fit()` | `(n, T)` for EKF-DMD and OnlineDMD methods |
+| `predicted_data` | causal one-step prior during `fit()` | `(n, T)` for EKF-DMD, `OnlineDMD`, and `RecursiveDMDc` |
 | `filtered_data` | EKF posterior state history | `(n, T)` for EKF-DMD implementations |
 
 When `SlidingWindowDMD(svd_rank=None)` is used, the numerical rank may vary between windows. `eigs` and `modes` are then tuples of per-window arrays. Set `svd_rank` for fixed-shape arrays suitable for mode tracking. `SlidingWindowDMDc` reports eigenpairs of each full state operator, so its modal dimension is `n`.
@@ -156,7 +166,7 @@ Use `CITATION.cff` to cite the software. Cite the relevant method paper when rep
 - H. Zhang, C. W. Rowley, E. A. Deem, and L. N. Cattafesta, “Online Dynamic Mode Decomposition for Time-Varying Systems,” *SIAM Journal on Applied Dynamical Systems*, 18(3), 1586–1609, 2019. https://doi.org/10.1137/18M1192329
 - P. J. Schmid, “Dynamic mode decomposition of numerical and experimental data,” *Journal of Fluid Mechanics*, 656, 5–28, 2010. https://doi.org/10.1017/S0022112010001217
 
-`EKFDMDc` uses EKF-DMD estimation with the DMD-with-control state equation. `SlidingWindowDMD` fits standard DMD independently to overlapping windows.
+`EKFDMDc` uses EKF-DMD estimation with the DMD-with-control state equation. `RecursiveDMDc` applies the recursive least-squares update to the concatenated state-control regressor. `SlidingWindowDMD` fits standard DMD independently to overlapping windows.
 
 ## License
 
