@@ -28,7 +28,10 @@ jobs:
           python-version: "3.14"
       - run: python -m venv .venv
       - run: .venv/bin/python -m pip install '.[numba]'
-      - run: .venv/bin/python -m unittest tests.test_core.CoreTests.test_online_numba_matches_python_kernel
+      - run: >-
+          .venv/bin/python -m unittest
+          tests.test_core.CoreTests.test_online_numba_matches_python_kernel
+          tests.test_recursive_dmdc.RecursiveDMDcTests.test_numba_matches_python_kernel
 
   build:
     runs-on: ubuntu-latest
