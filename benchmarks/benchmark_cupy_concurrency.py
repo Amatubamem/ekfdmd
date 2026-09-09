@@ -16,6 +16,33 @@ os.environ.setdefault("MKL_NUM_THREADS", "1")
 import numpy as np
 
 
+def _fit_once(
+    worker_id: int,
+    n: int,
+    steps: int,
+    rank: int | None,
+    device_id: int,
+) -> float:
+    """Run one target-size FP64 fit to populate CUDA/CuPy caches."""
+    import cupy as cp
+
+    from ekfdmd.cupy import CuPyEKFDMD
+
+    cp.cuda.Device(device_id).use()
+    X = np.random.default_rng(10_000 + worker_id).standard_normal((n, steps)).astype(np.float64)
+    start = time.perf_counter()
+    model = CuPyEKFDMD(
+        state_noise=1e-3,
+        operator_noise=1e-5,
+        measurement_noise=2e-3,
+        rank=rank,
+    ).fit(X)
+    cp.cuda.Device().synchronize()
+    if model.operator.dtype != np.float64:
+        raise RuntimeError(f"expected float64 output, got {model.operator.dtype}")
+    return time.perf_counter() - start
+
+
 def _worker(
     worker_id: int,
     n: int,
@@ -97,6 +124,13 @@ def _gpu_memory_gib(device_id: int) -> tuple[float, float] | None:
         return None
 
 
+def _run_preflight(n: int, steps: int, rank: int | None, device_id: int) -> float:
+    """Warm target-size CUDA kernels in a disposable process before measurement."""
+    ctx = mp.get_context("spawn")
+    with ProcessPoolExecutor(max_workers=1, mp_context=ctx) as executor:
+        return executor.submit(_fit_once, -1, n, steps, rank, device_id).result()
+
+
 def _run_level(
     concurrency: int,
     *,
@@ -145,7 +179,11 @@ def _run_level(
 
             start = time.perf_counter()
             while True:
-                done, _ = wait(futures, timeout=monitor_interval if monitor_interval > 0 else None, return_when=ALL_COMPLETED)
+                done, _ = wait(
+                    futures,
+                    timeout=monitor_interval if monitor_interval > 0 else None,
+                    return_when=ALL_COMPLETED,
+                )
                 memory = _gpu_memory_gib(device_id) if monitor_interval > 0 else None
                 if memory is not None:
                     peak_used = max(peak_used, memory[0])
@@ -198,7 +236,7 @@ def main() -> None:
     parser.add_argument(
         "--concurrency",
         type=_parse_levels,
-        default=_parse_levels("1,2,4,8,12,16,24,32,40"),
+        default=_parse_levels("1,2,4,8,12,16,24,32,40,48,56,64,72"),
         help="comma-separated process counts",
     )
     parser.add_argument(
@@ -220,10 +258,12 @@ def main() -> None:
     if args.monitor_interval < 0:
         parser.error("--monitor-interval must be non-negative")
 
+    preflight_time = _run_preflight(args.n, args.steps, args.rank, args.device)
     print(
         f"# FP64 CuPyEKFDMD: n={args.n}, steps={args.steps}, rank={args.rank}, "
         f"fits_per_worker={args.fits_per_worker}, device={args.device}"
     )
+    print(f"# target_size_preflight_s={preflight_time:.6f}")
     print(
         "concurrency,status,wall_s,cases_per_s,throughput_vs_1x,median_worker_s,"
         "peak_vram_gib,peak_vram_delta_gib,sum_cupy_pool_gib"
