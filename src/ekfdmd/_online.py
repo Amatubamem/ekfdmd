@@ -125,12 +125,14 @@ class OnlineDMD:
 
 
 class RecursiveDMDc:
-    """Recursive DMDc following Bou Hamdan et al. (2023).
+    """DMDc-initialized recursive least-squares DMDc.
 
-    The recursive least-squares update is initialized from an exponentially
-    weighted DMDc fit on an initial batch instead of an arbitrary identity
-    operator. ``initial_window=None`` uses the smallest batch with at least as
-    many transitions as regressors in ``[x; u]``.
+    Bou Hamdan et al. (2023) initialize recursive system identification with
+    DMDc and then update the identified operators recursively with forgetting.
+    This implementation follows that setup. ``initial_window=None`` uses the
+    smallest batch with at least as many transitions as regressors in
+    ``[x; u]``; that batch-length default is a standard identifiability choice,
+    not a paper-specific tuned parameter.
     """
 
     def __init__(
