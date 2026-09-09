@@ -29,11 +29,26 @@ class CoreTests(unittest.TestCase):
         self.assertIs(solver.fit(X), solver)
         np.testing.assert_allclose(solver.operator, A, atol=2e-3)
         np.testing.assert_allclose(solver.predict(X[:, -1]), A @ X[:, -1], atol=2e-3)
-        self.assertEqual(solver.operators.shape, (80, 2, 2))
-        self.assertEqual(solver.eigs.shape, (80, 2))
-        self.assertEqual(solver.modes.shape, (80, 2, 2))
+        np.testing.assert_array_equal(solver.history_indices, [79])
+        self.assertEqual(solver.operators.shape, (1, 2, 2))
+        self.assertEqual(solver.eigs.shape, (1, 2))
+        self.assertEqual(solver.modes.shape, (1, 2, 2))
         self.assertEqual(solver.predicted_data.shape, X.shape)
         self.assertEqual(solver.filtered_data.shape, X.shape)
+
+    def test_ekfdmd_history_selection(self):
+        A = np.array([[0.97, -0.04], [0.04, 0.97]])
+        X = trajectory(A, np.array([1.0, 0.3]), 12)
+        kwargs = dict(state_noise=1e-5, measurement_noise=1e-5, initialize_with_dmd=False)
+        full = EKFDMD(history="all", **kwargs).fit(X)
+        sampled = EKFDMD(history=5, **kwargs).fit(X)
+
+        np.testing.assert_array_equal(full.history_indices, np.arange(12))
+        np.testing.assert_array_equal(sampled.history_indices, [0, 5, 10, 11])
+        np.testing.assert_allclose(sampled.operators, full.operators[[0, 5, 10, 11]])
+        np.testing.assert_allclose(sampled.operator, full.operator)
+        with self.assertRaises(ValueError):
+            EKFDMD(history=0, **kwargs).fit(X)
 
     def test_ekfdmd_matches_legacy_sparse_reference(self):
         A = np.array([[0.97, -0.07], [0.05, 0.96]])
@@ -60,7 +75,8 @@ class CoreTests(unittest.TestCase):
         self.assertIs(solver.fit(X, U), solver)
         np.testing.assert_allclose(solver.operator, A, atol=2e-3)
         np.testing.assert_allclose(solver.control_operator, B, atol=2e-3)
-        self.assertEqual(solver.control_operators.shape, (80, 1, 1))
+        np.testing.assert_array_equal(solver.history_indices, [79])
+        self.assertEqual(solver.control_operators.shape, (1, 1, 1))
         self.assertEqual(solver.predicted_data.shape, X.shape)
 
     def test_ekfdmdc_matches_legacy_sparse_reference(self):
