@@ -128,17 +128,22 @@ class CuPyEKFDMD:
             P = 0.5 * (P + P.T.conj())
             operators[k], filtered[:, k], predicted[:, k] = A, x, x_pred
 
-        operators_full = cp.einsum("ij,tjk,lk->til", projection, operators, projection.conj())
-        filtered_full = projection @ filtered
-        predicted_full = projection @ predicted
-        eigs, reduced_modes = cp.linalg.eig(operators)
-        modes = cp.einsum("ij,tjk->tik", projection, reduced_modes)
+        operators_reduced = cp.asnumpy(operators)
+        operators_full = cp.asnumpy(cp.einsum("ij,tjk,lk->til", projection, operators, projection.conj()))
+        filtered_full = cp.asnumpy(projection @ filtered)
+        predicted_full = cp.asnumpy(projection @ predicted)
 
-        self.operators = cp.asnumpy(operators_full)
-        self.filtered_data = cp.asnumpy(filtered_full)
-        self.predicted_data = cp.asnumpy(predicted_full)
-        self.eigs = cp.asnumpy(eigs)
-        self.modes = cp.asnumpy(modes)
+        # ponytail: CuPy's general eigendecomposition requires cuSOLVER geev,
+        # which is unavailable on some CUDA installations. Keep the EKF on the
+        # GPU and use NumPy only for this post-processing step.
+        eigs, reduced_modes = np.linalg.eig(operators_reduced)
+        modes = np.einsum("ij,tjk->tik", cp.asnumpy(projection), reduced_modes)
+
+        self.operators = operators_full
+        self.filtered_data = filtered_full
+        self.predicted_data = predicted_full
+        self.eigs = eigs
+        self.modes = modes
         self.operator = self.operators[-1]
         return self
 
