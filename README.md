@@ -1,20 +1,20 @@
 # ekfdmd
 
-`ekfdmd` is a small Python package for sequential and time-varying Dynamic Mode Decomposition, centered on Extended Kalman Filter DMD (EKF-DMD).
+`ekfdmd` implements sequential and time-varying Dynamic Mode Decomposition methods centered on Extended Kalman Filter DMD (EKF-DMD).
 
-It complements [PyDMD](https://github.com/PyDMD/PyDMD): PyDMD provides a broad collection of DMD variants, while this package focuses on EKF-based and sequential operator estimation.
+For a broader collection of DMD variants, see [PyDMD](https://github.com/PyDMD/PyDMD).
 
 ## Quickstart
 
-See [`examples/nonomura_2019.ipynb`](examples/nonomura_2019.ipynb) for a reproducible implementation of the small-DoF numerical experiment in Section 4.1 of Nonomura, Shibata, and Takaki (2019).
+[`examples/nonomura_2019.ipynb`](examples/nonomura_2019.ipynb) reproduces the small-DoF numerical experiment from Section 4.1 of Nonomura, Shibata, and Takaki (2019).
 
 ## Methods
 
 | Solver | Input | Main parameters | Purpose |
 | --- | --- | --- | --- |
-| `EKFDMD` | `X: (n, T)` | `state_noise`, `operator_noise`, `measurement_noise`, `rank` | EKF-based simultaneous state filtering and operator estimation |
-| `CuPyEKFDMD` | `X: (n, T)` | same as `EKFDMD` | CUDA implementation of EKF-DMD for explicit GPU execution |
-| `MPSEKFDMD` | `X: (n, T)` | same as `EKFDMD` | float32 Apple MPS implementation of EKF-DMD for explicit GPU execution |
+| `EKFDMD` | `X: (n, T)` | `state_noise`, `operator_noise`, `measurement_noise`, `rank` | simultaneous state filtering and operator estimation with EKF-DMD |
+| `CuPyEKFDMD` | `X: (n, T)` | same as `EKFDMD` | CUDA implementation of EKF-DMD |
+| `MPSEKFDMD` | `X: (n, T)` | same as `EKFDMD` | float32 Apple MPS implementation of EKF-DMD |
 | `EKFDMDc` | `X: (n, T)`, `U: (m, T)` | same as `EKFDMD` | EKF-DMD with a known control input and estimated `A, B` |
 | `SlidingWindowDMD` | `X: (n, T)` | `window_size`, `svd_rank` | independent DMD fits on overlapping windows |
 | `SlidingWindowDMDc` | `X: (n, T)`, `U: (m, T)` | `window_size`, `svd_rank` | sliding-window DMD with control |
@@ -26,35 +26,27 @@ See [`examples/nonomura_2019.ipynb`](examples/nonomura_2019.ipynb) for a reprodu
 uv add ekfdmd
 ```
 
-Numba is optional. When installed, it accelerates the Online DMD update loop without changing the public API.
+Numba accelerates the Online DMD update loop:
 
 ```sh
 uv add 'ekfdmd[numba]'
 ```
 
-CUDA 12.x support is optional. The `cuda12` extra installs CuPy and the CUDA component wheels, so a system-wide CUDA Toolkit is not required when a compatible NVIDIA driver is already installed.
+For CUDA 12.x, install the CuPy backend and CUDA component wheels:
 
 ```sh
 uv add 'ekfdmd[cuda12]'
 ```
 
-For a source checkout, install the CUDA extra with:
+A compatible NVIDIA driver is required. A system-wide CUDA Toolkit is not required.
 
-```sh
-uv sync --extra cuda12
-```
-
-Apple MPS support is optional and uses PyTorch.
+For Apple MPS, install the PyTorch backend:
 
 ```sh
 uv add 'ekfdmd[mps]'
 ```
 
-For a source checkout, install the MPS extra with:
-
-```sh
-uv sync --extra mps
-```
+For a source checkout, use `uv sync --extra cuda12` or `uv sync --extra mps`.
 
 ## Usage
 
@@ -73,7 +65,7 @@ modes_t = model.modes
 x_next = model.predict(X[:, -1])
 ```
 
-Use the CUDA backend explicitly when desired. Backend selection is not automatic because the CPU/GPU break-even point depends on the hardware and problem size. `CuPyEKFDMD` accepts NumPy input and returns NumPy arrays through the same data contract as `EKFDMD`.
+CUDA 12.x:
 
 ```python
 from ekfdmd.cupy import CuPyEKFDMD
@@ -85,7 +77,9 @@ model = CuPyEKFDMD(
 ).fit(X)
 ```
 
-Use the Apple MPS backend explicitly on supported Macs. `MPSEKFDMD` runs the EKF update in `float32`, while the default NumPy/SciPy implementation uses `float64`. Sequential rounding differences can therefore accumulate, and MPS results are not expected to be numerically identical to `EKFDMD`. Local validation showed near-identical first-step updates, deterministic repeated MPS runs, and accumulated final-operator differences of roughly 1–2% in relative Frobenius norm for the tested 100-step cases. Performance and numerical differences depend on hardware and data.
+`CuPyEKFDMD` accepts NumPy arrays and returns NumPy arrays with the same public attributes as `EKFDMD`.
+
+Apple MPS:
 
 ```python
 from ekfdmd.mps import MPSEKFDMD
@@ -97,6 +91,8 @@ model = MPSEKFDMD(
 ).fit(X)
 ```
 
+`MPSEKFDMD` performs the EKF update in `float32`. Rounding differences from the default `float64` implementation can accumulate over long sequences. [`benchmarks/benchmark_mps_ekfdmd.py`](benchmarks/benchmark_mps_ekfdmd.py) measures runtime and numerical differences on the target Mac.
+
 Controlled systems use the same `fit`-first interface:
 
 ```python
@@ -106,7 +102,7 @@ model = EKFDMDc().fit(X, U)
 x_next = model.predict(X[:, -1], U[:, -1])
 ```
 
-`predict()` always means one-step prediction with the final fitted operator. It does not perform reconstruction or filtering.
+`predict()` returns a one-step prediction with the final fitted operator.
 
 ## Public data contract
 
@@ -115,15 +111,15 @@ Let `n` be the full state dimension, `r` the reduced/modal dimension, `m` the co
 | Attribute | Meaning | Shape |
 | --- | --- | --- |
 | `operator` | final state operator | `(n, n)` |
-| `operators` | operator history | `(T, n, n)` for EKF/Online, `(W, n, n)` for sliding-window methods |
+| `operators` | operator history | `(T, n, n)` for EKF-DMD and OnlineDMD methods, `(W, n, n)` for sliding-window methods |
 | `control_operator` | final control operator | `(n, m)` |
-| `control_operators` | control-operator history | `(T, n, m)` for EKFDMDc, `(W, n, m)` for SlidingWindowDMDc |
+| `control_operators` | control-operator history | `(T, n, m)` for `EKFDMDc`, `(W, n, m)` for `SlidingWindowDMDc` |
 | `eigs` | eigenvalue history | `(T, r)` or `(W, r)` when fixed-rank |
 | `modes` | mode history | `(T, n, r)` or `(W, n, r)` when fixed-rank |
-| `predicted_data` | causal one-step prior during `fit()` | `(n, T)`; EKFDMD/EKFDMDc/OnlineDMD only |
-| `filtered_data` | EKF posterior state history | `(n, T)`; EKFDMD/EKFDMDc only |
+| `predicted_data` | causal one-step prior during `fit()` | `(n, T)` for EKF-DMD and OnlineDMD methods |
+| `filtered_data` | EKF posterior state history | `(n, T)` for EKF-DMD implementations |
 
-`SlidingWindowDMD(svd_rank=None)` deliberately allows the numerical rank to vary by window, so `eigs` and `modes` are tuples of per-window arrays. Set `svd_rank` to obtain fixed-shape arrays suitable for mode tracking. `SlidingWindowDMDc` reports eigenpairs of each full state operator, so its modal dimension is always `n`.
+When `SlidingWindowDMD(svd_rank=None)` is used, the numerical rank may vary between windows. `eigs` and `modes` are then tuples of per-window arrays. Set `svd_rank` for fixed-shape arrays suitable for mode tracking. `SlidingWindowDMDc` reports eigenpairs of each full state operator, so its modal dimension is `n`.
 
 When `EKFDMDc(initialize_with_dmd=False)` is used, the initial state operator is identity and the initial control operator is zero.
 
@@ -139,18 +135,14 @@ tracked_eigs, tracked_modes = track_modes(model.eigs, model.modes)
 
 ## References
 
-The implementation author and the authors of the underlying algorithms are distinct. Cite the software itself using `CITATION.cff`; cite the relevant method paper when reporting scientific results.
+Use `CITATION.cff` to cite the software. Cite the relevant method paper when reporting scientific results.
 
 - T. Nonomura, H. Shibata, and R. Takaki, “Extended-Kalman-filter-based dynamic mode decomposition for simultaneous system identification and denoising,” *PLoS ONE*, 14(2), e0209836, 2019. https://doi.org/10.1371/journal.pone.0209836
 - J. L. Proctor, S. L. Brunton, and J. N. Kutz, “Dynamic Mode Decomposition with Control,” *SIAM Journal on Applied Dynamical Systems*, 15(1), 142–161, 2016. https://doi.org/10.1137/15M1013857
 - H. Zhang, C. W. Rowley, E. A. Deem, and L. N. Cattafesta, “Online Dynamic Mode Decomposition for Time-Varying Systems,” *SIAM Journal on Applied Dynamical Systems*, 18(3), 1586–1609, 2019. https://doi.org/10.1137/18M1192329
 - P. J. Schmid, “Dynamic mode decomposition of numerical and experimental data,” *Journal of Fluid Mechanics*, 656, 5–28, 2010. https://doi.org/10.1017/S0022112010001217
 
-`EKFDMDc` combines the EKF-DMD formulation with a DMD-with-control state equation; this package does not claim a separate original EKFDMDc algorithm publication. `SlidingWindowDMD` applies standard DMD independently to overlapping windows rather than introducing a new DMD formulation.
-
-## Scope
-
-This package intentionally does not include plotting, neural-network integrations, experiment management, or general data utilities. PyDMD remains the recommended package when EKF or sequential estimation is not required.
+`EKFDMDc` uses EKF-DMD estimation with the DMD-with-control state equation. `SlidingWindowDMD` fits standard DMD independently to overlapping windows.
 
 ## License
 
