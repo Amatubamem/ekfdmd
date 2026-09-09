@@ -2,6 +2,13 @@
 
 from ._dmd import SlidingWindowDMD, SlidingWindowDMDc
 from ._ekf import EKFDMD, EKFDMDc
-from ._online import OnlineDMD
+from ._online import OnlineDMD, RecursiveDMDc
 
-__all__ = ["EKFDMD", "EKFDMDc", "OnlineDMD", "SlidingWindowDMD", "SlidingWindowDMDc"]
+__all__ = [
+    "EKFDMD",
+    "EKFDMDc",
+    "OnlineDMD",
+    "RecursiveDMDc",
+    "SlidingWindowDMD",
+    "SlidingWindowDMDc",
+]
