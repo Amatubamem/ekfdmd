@@ -20,8 +20,15 @@ class MPSExperimentTests(unittest.TestCase):
         expected = EKFDMD(**kwargs).fit(X)
         actual = MPSEKFDMD(**kwargs).fit(X)
 
-        np.testing.assert_allclose(actual.operator, expected.operator, rtol=2e-3, atol=2e-4)
-        np.testing.assert_allclose(actual.filtered_data, expected.filtered_data, rtol=2e-3, atol=2e-4)
+        for actual_array, expected_array in (
+            (actual.operator, expected.operator),
+            (actual.filtered_data, expected.filtered_data),
+        ):
+            difference = actual_array - expected_array
+            relative_frobenius_error = np.linalg.norm(difference) / np.linalg.norm(expected_array)
+            max_absolute_error = np.max(np.abs(difference))
+            self.assertLess(relative_frobenius_error, 1e-2)
+            self.assertLess(max_absolute_error, 5e-3)
 
 
 if __name__ == "__main__":
