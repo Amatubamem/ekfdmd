@@ -8,6 +8,8 @@ try:
 except ImportError as exc:  # pragma: no cover - depends on the optional CUDA extra
     raise ImportError("CuPyEKFDMD requires the 'cuda12' optional dependency.") from exc
 
+from ._ekf import History, _history_indices
+
 
 def _snapshots(array: np.ndarray, name: str = "X") -> cp.ndarray:
     array = cp.asarray(array)
@@ -72,6 +74,7 @@ class CuPyEKFDMD:
         initial_covariance: float = 100.0,
         rank: int | None = None,
         initialize_with_dmd: bool = True,
+        history: History = "final",
     ) -> None:
         for name, value in (
             ("state_noise", state_noise),
@@ -88,12 +91,14 @@ class CuPyEKFDMD:
         self.initial_covariance = initial_covariance
         self.rank = rank
         self.initialize_with_dmd = initialize_with_dmd
+        self.history = history
 
     def fit(self, X: np.ndarray) -> CuPyEKFDMD:
         X_gpu = _snapshots(X)
         projection = _basis(X_gpu, self.rank)
         reduced = projection.conj().T @ X_gpu
         n, steps = reduced.shape
+        history_indices = _history_indices(steps, self.history)
         A = _dmd(reduced) if self.initialize_with_dmd else cp.eye(n, dtype=reduced.dtype)
         x = reduced[:, 0].copy()
         state_size = n + n * n
@@ -102,10 +107,14 @@ class CuPyEKFDMD:
         diagonal = cp.arange(state_size)
         R = cp.eye(n, dtype=reduced.dtype) * self.measurement_noise
 
-        operators = cp.empty((steps, n, n), dtype=reduced.dtype)
+        operators = cp.empty((history_indices.size, n, n), dtype=reduced.dtype)
         filtered = cp.empty((n, steps), dtype=reduced.dtype)
         predicted = cp.empty((n, steps), dtype=reduced.dtype)
-        operators[0], filtered[:, 0], predicted[:, 0] = A, x, x
+        filtered[:, 0], predicted[:, 0] = x, x
+        history_position = 0
+        if history_indices[0] == 0:
+            operators[0] = A
+            history_position = 1
 
         for k in range(1, steps):
             x_pred = A @ x
@@ -124,7 +133,10 @@ class CuPyEKFDMD:
             A = A + delta[n:].reshape(n, n)
             P = P_pred - K @ cross.T.conj()
             P = 0.5 * (P + P.T.conj())
-            operators[k], filtered[:, k], predicted[:, k] = A, x, x_pred
+            filtered[:, k], predicted[:, k] = x, x_pred
+            if history_position < history_indices.size and k == history_indices[history_position]:
+                operators[history_position] = A
+                history_position += 1
 
         operators_reduced = cp.asnumpy(operators)
         operators_full = cp.asnumpy(cp.einsum("ij,tjk,lk->til", projection, operators, projection.conj()))
@@ -136,6 +148,7 @@ class CuPyEKFDMD:
         eigs, reduced_modes = np.linalg.eig(operators_reduced)
         modes = np.einsum("ij,tjk->tik", cp.asnumpy(projection), reduced_modes)
 
+        self.history_indices = history_indices
         self.operators = operators_full
         self.filtered_data = filtered_full
         self.predicted_data = predicted_full
