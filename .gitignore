@@ -1,0 +1,25 @@
+# Ignore everything by default.
+*
+
+# Repository metadata and configuration.
+!/.gitignore
+!/.github/
+!/.github/**
+!/README.md
+!/LICENSE
+!/CITATION.cff
+!/pyproject.toml
+!/uv.lock
+
+# Package source.
+!/src/
+!/src/ekfdmd/
+!/src/ekfdmd/*.py
+
+# Tests and experiments.
+!/tests/
+!/tests/*.py
+!/benchmarks/
+!/benchmarks/*.py
+!/examples/
+!/examples/*.ipynb
