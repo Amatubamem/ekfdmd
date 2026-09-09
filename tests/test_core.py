@@ -115,7 +115,7 @@ class CoreTests(unittest.TestCase):
         B = np.array([[0.17]])
         U = np.sin(np.arange(200, dtype=float) * 0.37)[None, :]
         X = trajectory(A, np.array([0.4]), 200, B, U)
-        solver = RecursiveDMDc(initial_covariance=1e8)
+        solver = RecursiveDMDc()
         self.assertIs(solver.fit(X, U), solver)
         np.testing.assert_allclose(solver.operator, A, atol=2e-3)
         np.testing.assert_allclose(solver.control_operator, B, atol=2e-3)
