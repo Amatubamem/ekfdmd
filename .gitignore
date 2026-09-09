@@ -9,7 +9,6 @@
 !/LICENSE
 !/CITATION.cff
 !/pyproject.toml
-!/uv.lock
 
 # Package source.
 !/src/
