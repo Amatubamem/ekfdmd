@@ -15,12 +15,14 @@ class MPSTests(unittest.TestCase):
         from ekfdmd.mps import MPSEKFDMD
 
         X = np.random.default_rng(123).standard_normal((3, 12))
-        kwargs = dict(state_noise=1e-3, operator_noise=1e-5, measurement_noise=2e-3)
+        kwargs = dict(state_noise=1e-3, operator_noise=1e-5, measurement_noise=2e-3, history=4)
         expected = MPSEKFDMD(**kwargs)._fit_device(X, torch.device("cpu"))
         actual = MPSEKFDMD(**kwargs).fit(X)
 
+        np.testing.assert_array_equal(actual.history_indices, [0, 4, 8, 11])
         for actual_array, expected_array in (
             (actual.operator, expected.operator),
+            (actual.operators, expected.operators),
             (actual.filtered_data, expected.filtered_data),
         ):
             difference = actual_array - expected_array
