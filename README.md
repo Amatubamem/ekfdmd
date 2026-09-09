@@ -12,7 +12,7 @@ For a broader collection of DMD variants, see [PyDMD](https://github.com/PyDMD/P
 
 | Solver | Input | Main parameters | Purpose |
 | --- | --- | --- | --- |
-| `EKFDMD` | `X: (n, T)` | `state_noise`, `operator_noise`, `measurement_noise`, `rank` | simultaneous state filtering and operator estimation with EKF-DMD |
+| `EKFDMD` | `X: (n, T)` | `state_noise`, `operator_noise`, `measurement_noise`, `rank`, `history` | simultaneous state filtering and operator estimation with EKF-DMD |
 | `CuPyEKFDMD` | `X: (n, T)` | same as `EKFDMD` | CUDA implementation of EKF-DMD |
 | `MPSEKFDMD` | `X: (n, T)` | same as `EKFDMD` | float32 Apple MPS implementation of EKF-DMD |
 | `EKFDMDc` | `X: (n, T)`, `U: (m, T)` | same as `EKFDMD` | EKF-DMD with a known control input and estimated `A, B` |
@@ -59,11 +59,22 @@ model = EKFDMD(
     operator_noise=0.0,
 ).fit(X)
 
+A = model.operator
+x_next = model.predict(X[:, -1])
+```
+
+EKF solvers store only the final operator, eigenvalues, and modes by default. Set `history="all"` to retain every step, or pass a positive integer to retain that interval and the final step.
+
+```python
+model = EKFDMD(history=10).fit(X)
+
+steps = model.history_indices
 A_t = model.operators
 lambdas_t = model.eigs
 modes_t = model.modes
-x_next = model.predict(X[:, -1])
 ```
+
+`filtered_data` and `predicted_data` retain all input steps.
 
 CUDA 12.x:
 
@@ -106,16 +117,17 @@ x_next = model.predict(X[:, -1], U[:, -1])
 
 ## Public data contract
 
-Let `n` be the full state dimension, `r` the reduced/modal dimension, `m` the control dimension, `T` the number of snapshots, and `W` the number of sliding windows.
+Let `n` be the full state dimension, `r` the reduced/modal dimension, `m` the control dimension, `T` the number of snapshots, `H` the number of stored EKF history steps, and `W` the number of sliding windows.
 
 | Attribute | Meaning | Shape |
 | --- | --- | --- |
 | `operator` | final state operator | `(n, n)` |
-| `operators` | operator history | `(T, n, n)` for EKF-DMD and OnlineDMD methods, `(W, n, n)` for sliding-window methods |
+| `operators` | operator history | `(H, n, n)` for EKF-DMD methods, `(T, n, n)` for `OnlineDMD`, `(W, n, n)` for sliding-window methods |
 | `control_operator` | final control operator | `(n, m)` |
-| `control_operators` | control-operator history | `(T, n, m)` for `EKFDMDc`, `(W, n, m)` for `SlidingWindowDMDc` |
-| `eigs` | eigenvalue history | `(T, r)` or `(W, r)` when fixed-rank |
-| `modes` | mode history | `(T, n, r)` or `(W, n, r)` when fixed-rank |
+| `control_operators` | control-operator history | `(H, n, m)` for `EKFDMDc`, `(W, n, m)` for `SlidingWindowDMDc` |
+| `eigs` | eigenvalue history | `(H, r)` for EKF-DMD methods, `(T, n)` for `OnlineDMD`, or `(W, r)` when fixed-rank |
+| `modes` | mode history | `(H, n, r)` for EKF-DMD methods, `(T, n, n)` for `OnlineDMD`, or `(W, n, r)` when fixed-rank |
+| `history_indices` | stored EKF step indices | `(H,)` |
 | `predicted_data` | causal one-step prior during `fit()` | `(n, T)` for EKF-DMD and OnlineDMD methods |
 | `filtered_data` | EKF posterior state history | `(n, T)` for EKF-DMD implementations |
 
@@ -126,8 +138,10 @@ When `EKFDMDc(initialize_with_dmd=False)` is used, the initial state operator is
 ## Mode tracking
 
 ```python
+from ekfdmd import EKFDMD
 from ekfdmd.postprocess import track_modes
 
+model = EKFDMD(history="all").fit(X)
 tracked_eigs, tracked_modes = track_modes(model.eigs, model.modes)
 ```
 
