@@ -39,7 +39,7 @@ def _case(n: int, steps: int, repeat: int) -> tuple[float, float]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Compare NumPy/SciPy and CuPy EKF-DMD runtimes.")
-    parser.add_argument("--repeat", type=int, default=3)
+    parser.add_argument("--repeat", type=int, default=5)
     args = parser.parse_args()
     if args.repeat < 1:
         parser.error("--repeat must be at least 1")
@@ -48,7 +48,7 @@ def main() -> None:
     CuPyEKFDMD().fit(np.random.default_rng(0).standard_normal((2, 4)))
 
     print("n,t,cpu_s,cupy_s,speedup")
-    for n in (10, 20, 30, 40, 50):
+    for n in (20, 25, 30, 35, 40, 50):
         steps = 100
         cpu_time, gpu_time = _case(n, steps, args.repeat)
         print(f"{n},{steps},{cpu_time:.6f},{gpu_time:.6f},{cpu_time / gpu_time:.3f}")
