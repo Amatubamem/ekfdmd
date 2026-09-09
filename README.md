@@ -18,6 +18,7 @@ See [`examples/nonomura_2019.ipynb`](examples/nonomura_2019.ipynb) for a reprodu
 | `SlidingWindowDMD` | `X: (n, T)` | `window_size`, `svd_rank` | independent DMD fits on overlapping windows |
 | `SlidingWindowDMDc` | `X: (n, T)`, `U: (m, T)` | `window_size`, `svd_rank` | sliding-window DMD with control |
 | `OnlineDMD` | `X: (n, T)` | `rho`, `initial_covariance` | recursive least-squares DMD with exponential forgetting |
+| `RecursiveDMDc` | `X: (n, T)`, `U: (m, T)` | `rho`, `initial_covariance`, `rank` | recursive least-squares DMD with control and exponential forgetting |
 
 ## Installation
 
@@ -92,10 +93,10 @@ Let `n` be the full state dimension, `r` the reduced/modal dimension, `m` the co
 | `operator` | final state operator | `(n, n)` |
 | `operators` | operator history | `(T, n, n)` for EKF/Online, `(W, n, n)` for sliding-window methods |
 | `control_operator` | final control operator | `(n, m)` |
-| `control_operators` | control-operator history | `(T, n, m)` for EKFDMDc, `(W, n, m)` for SlidingWindowDMDc |
+| `control_operators` | control-operator history | `(T, n, m)` for EKFDMDc/RecursiveDMDc, `(W, n, m)` for SlidingWindowDMDc |
 | `eigs` | eigenvalue history | `(T, r)` or `(W, r)` when fixed-rank |
 | `modes` | mode history | `(T, n, r)` or `(W, n, r)` when fixed-rank |
-| `predicted_data` | causal one-step prior during `fit()` | `(n, T)`; EKFDMD/EKFDMDc/OnlineDMD only |
+| `predicted_data` | causal one-step prior during `fit()` | `(n, T)`; EKFDMD/EKFDMDc/OnlineDMD/RecursiveDMDc only |
 | `filtered_data` | EKF posterior state history | `(n, T)`; EKFDMD/EKFDMDc only |
 
 `SlidingWindowDMD(svd_rank=None)` deliberately allows the numerical rank to vary by window, so `eigs` and `modes` are tuples of per-window arrays. Set `svd_rank` to obtain fixed-shape arrays suitable for mode tracking. `SlidingWindowDMDc` reports eigenpairs of each full state operator, so its modal dimension is always `n`.
@@ -118,15 +119,3 @@ The implementation author and the authors of the underlying algorithms are disti
 
 - T. Nonomura, H. Shibata, and R. Takaki, “Extended-Kalman-filter-based dynamic mode decomposition for simultaneous system identification and denoising,” *PLoS ONE*, 14(2), e0209836, 2019. https://doi.org/10.1371/journal.pone.0209836
 - J. L. Proctor, S. L. Brunton, and J. N. Kutz, “Dynamic Mode Decomposition with Control,” *SIAM Journal on Applied Dynamical Systems*, 15(1), 142–161, 2016. https://doi.org/10.1137/15M1013857
-- H. Zhang, C. W. Rowley, E. A. Deem, and L. N. Cattafesta, “Online Dynamic Mode Decomposition for Time-Varying Systems,” *SIAM Journal on Applied Dynamical Systems*, 18(3), 1586–1609, 2019. https://doi.org/10.1137/18M1192329
-- P. J. Schmid, “Dynamic mode decomposition of numerical and experimental data,” *Journal of Fluid Mechanics*, 656, 5–28, 2010. https://doi.org/10.1017/S0022112010001217
-
-`EKFDMDc` combines the EKF-DMD formulation with a DMD-with-control state equation; this package does not claim a separate original EKFDMDc algorithm publication. `SlidingWindowDMD` applies standard DMD independently to overlapping windows rather than introducing a new DMD formulation.
-
-## Scope
-
-This package intentionally does not include plotting, neural-network integrations, experiment management, or general data utilities. PyDMD remains the recommended package when EKF or sequential estimation is not required.
-
-## License
-
-MIT
