@@ -19,11 +19,13 @@ class CuPyTests(unittest.TestCase):
         from ekfdmd.cupy import CuPyEKFDMD
 
         X = np.random.default_rng(123).standard_normal((3, 12))
-        kwargs = dict(state_noise=1e-3, operator_noise=1e-5, measurement_noise=2e-3)
+        kwargs = dict(state_noise=1e-3, operator_noise=1e-5, measurement_noise=2e-3, history=4)
         expected = EKFDMD(**kwargs).fit(X)
         actual = CuPyEKFDMD(**kwargs).fit(X)
 
+        np.testing.assert_array_equal(actual.history_indices, [0, 4, 8, 11])
         np.testing.assert_allclose(actual.operator, expected.operator, rtol=1e-6, atol=1e-7)
+        np.testing.assert_allclose(actual.operators, expected.operators, rtol=1e-6, atol=1e-7)
         np.testing.assert_allclose(actual.filtered_data, expected.filtered_data, rtol=1e-6, atol=1e-7)
 
 
