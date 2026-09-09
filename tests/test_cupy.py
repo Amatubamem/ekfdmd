@@ -6,7 +6,7 @@ import numpy as np
 
 @unittest.skipUnless(importlib.util.find_spec("cupy"), "CuPy is not installed")
 class CuPyTests(unittest.TestCase):
-    def test_matches_default_ekfdmd(self):
+    def setUp(self):
         import cupy as cp
 
         try:
@@ -15,6 +15,7 @@ class CuPyTests(unittest.TestCase):
         except cp.cuda.runtime.CUDARuntimeError:
             self.skipTest("CUDA runtime is not available")
 
+    def test_matches_default_ekfdmd(self):
         from ekfdmd import EKFDMD
         from ekfdmd.cupy import CuPyEKFDMD
 
@@ -24,6 +25,21 @@ class CuPyTests(unittest.TestCase):
         actual = CuPyEKFDMD(**kwargs).fit(X)
 
         np.testing.assert_allclose(actual.operator, expected.operator, rtol=1e-6, atol=1e-7)
+        np.testing.assert_allclose(actual.filtered_data, expected.filtered_data, rtol=1e-6, atol=1e-7)
+
+    def test_matches_default_ekfdmdc(self):
+        from ekfdmd import EKFDMDc
+        from ekfdmd.cupy import CuPyEKFDMDc
+
+        rng = np.random.default_rng(321)
+        X = rng.standard_normal((3, 12))
+        U = rng.standard_normal((2, 12))
+        kwargs = dict(state_noise=1e-3, operator_noise=1e-5, measurement_noise=2e-3)
+        expected = EKFDMDc(**kwargs).fit(X, U)
+        actual = CuPyEKFDMDc(**kwargs).fit(X, U)
+
+        np.testing.assert_allclose(actual.operator, expected.operator, rtol=1e-6, atol=1e-7)
+        np.testing.assert_allclose(actual.control_operator, expected.control_operator, rtol=1e-6, atol=1e-7)
         np.testing.assert_allclose(actual.filtered_data, expected.filtered_data, rtol=1e-6, atol=1e-7)
 
 
