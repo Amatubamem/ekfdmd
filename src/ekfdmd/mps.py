@@ -8,6 +8,7 @@ except ImportError as exc:  # pragma: no cover - exercised only without the opti
     raise ImportError("PyTorch is required for ekfdmd.mps. Install ekfdmd[mps].") from exc
 
 from ._dmd import _basis, _dmd, _snapshots
+from ._ekf import History, _history_indices
 
 __all__ = ["MPSEKFDMD"]
 
@@ -22,7 +23,7 @@ class MPSEKFDMD:
 
     The EKF update runs in float32 on MPS. Results can therefore differ slightly
     from the default float64 NumPy/SciPy implementation after many sequential
-    updates. Backend selection is explicit; no problem-size threshold is applied.
+    updates.
     """
 
     def __init__(
@@ -34,6 +35,7 @@ class MPSEKFDMD:
         initial_covariance: float = 100.0,
         rank: int | None = None,
         initialize_with_dmd: bool = True,
+        history: History = "final",
     ) -> None:
         for name, value in (
             ("state_noise", state_noise),
@@ -50,6 +52,7 @@ class MPSEKFDMD:
         self.initial_covariance = initial_covariance
         self.rank = rank
         self.initialize_with_dmd = initialize_with_dmd
+        self.history = history
 
     def fit(self, X: np.ndarray) -> MPSEKFDMD:
         if not torch.backends.mps.is_available():
@@ -62,6 +65,7 @@ class MPSEKFDMD:
         projection = _basis(X, self.rank)
         reduced_cpu = projection.conj().T @ X
         n, steps = reduced_cpu.shape
+        history_indices = _history_indices(steps, self.history)
         A_cpu = _dmd(reduced_cpu)[0] if self.initialize_with_dmd else np.eye(n, dtype=reduced_cpu.dtype)
 
         dtype = torch.float32
@@ -80,10 +84,14 @@ class MPSEKFDMD:
         )
         R = torch.eye(n, dtype=dtype, device=device) * self.measurement_noise
 
-        operators = torch.empty((steps, n, n), dtype=dtype, device=device)
+        operators = torch.empty((history_indices.size, n, n), dtype=dtype, device=device)
         filtered = torch.empty((n, steps), dtype=dtype, device=device)
         predicted = torch.empty((n, steps), dtype=dtype, device=device)
-        operators[0], filtered[:, 0], predicted[:, 0] = A, x, x
+        filtered[:, 0], predicted[:, 0] = x, x
+        history_position = 0
+        if history_indices[0] == 0:
+            operators[0] = A
+            history_position = 1
 
         for k in range(1, steps):
             x_pred = A @ x
@@ -112,13 +120,17 @@ class MPSEKFDMD:
             A = A + delta[n:].reshape(n, n)
             P = P_pred - K @ cross.T
             P = 0.5 * (P + P.T)
-            operators[k], filtered[:, k], predicted[:, k] = A, x, x_pred
+            filtered[:, k], predicted[:, k] = x, x_pred
+            if history_position < history_indices.size and k == history_indices[history_position]:
+                operators[history_position] = A
+                history_position += 1
 
         operators_reduced = operators.cpu().numpy()
         filtered_reduced = filtered.cpu().numpy()
         predicted_reduced = predicted.cpu().numpy()
         eigs, reduced_modes = np.linalg.eig(operators_reduced)
 
+        self.history_indices = history_indices
         self.operators = np.einsum("ij,tjk,lk->til", projection, operators_reduced, projection.conj())
         self.filtered_data = projection @ filtered_reduced
         self.predicted_data = projection @ predicted_reduced

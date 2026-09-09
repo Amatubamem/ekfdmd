@@ -38,10 +38,11 @@ def _step_errors(actual: np.ndarray, expected: np.ndarray) -> np.ndarray:
 def _case(n: int, steps: int, repeat: int) -> tuple[float, ...]:
     X = np.random.default_rng(n).standard_normal((n, steps))
     kwargs = dict(state_noise=1e-3, operator_noise=1e-5, measurement_noise=2e-3)
+    diagnostic_kwargs = {**kwargs, "history": "all"}
 
     cpu64 = EKFDMD(**kwargs).fit(X)
-    cpu32 = MPSEKFDMD(**kwargs)._fit_device(X, torch.device("cpu"))
-    mps = MPSEKFDMD(**kwargs).fit(X)
+    cpu32 = MPSEKFDMD(**diagnostic_kwargs)._fit_device(X, torch.device("cpu"))
+    mps = MPSEKFDMD(**diagnostic_kwargs).fit(X)
     mps_repeat = MPSEKFDMD(**kwargs).fit(X)
 
     mps_vs_cpu64 = _relative_error(mps.operator, cpu64.operator)

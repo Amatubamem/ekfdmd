@@ -1,9 +1,27 @@
 from __future__ import annotations
 
+from numbers import Integral
+from typing import Literal
+
 import numpy as np
 from scipy.sparse import block_array, csr_array, eye
 
 from ._dmd import _basis, _dmd, _dmdc, _snapshots
+
+History = Literal["final", "all"] | int
+
+
+def _history_indices(steps: int, history: History) -> np.ndarray:
+    if history == "final":
+        return np.array([steps - 1], dtype=np.int64)
+    if history == "all":
+        return np.arange(steps, dtype=np.int64)
+    if isinstance(history, bool) or not isinstance(history, Integral) or history < 1:
+        raise ValueError("history must be 'final', 'all', or a positive integer.")
+    indices = np.arange(0, steps, int(history), dtype=np.int64)
+    if indices[-1] != steps - 1:
+        indices = np.append(indices, steps - 1)
+    return indices
 
 
 def _jacobian(vector: np.ndarray, rows: int) -> csr_array:
@@ -29,6 +47,7 @@ class EKFDMD:
         initial_covariance: float = 100.0,
         rank: int | None = None,
         initialize_with_dmd: bool = True,
+        history: History = "final",
     ) -> None:
         for name, value in (
             ("state_noise", state_noise),
@@ -45,12 +64,14 @@ class EKFDMD:
         self.initial_covariance = initial_covariance
         self.rank = rank
         self.initialize_with_dmd = initialize_with_dmd
+        self.history = history
 
     def fit(self, X: np.ndarray) -> EKFDMD:
         X = _snapshots(X)
         projection = _basis(X, self.rank)
         reduced = projection.conj().T @ X
         n, steps = reduced.shape
+        history_indices = _history_indices(steps, self.history)
         A = _dmd(reduced)[0] if self.initialize_with_dmd else np.eye(n, dtype=reduced.dtype)
         x = reduced[:, 0].copy()
         state_size = n + n * n
@@ -59,10 +80,14 @@ class EKFDMD:
         Q = csr_array((q, (np.arange(state_size), np.arange(state_size))), shape=(state_size, state_size))
         R = np.eye(n, dtype=reduced.dtype) * self.measurement_noise
 
-        operators = np.empty((steps, n, n), dtype=reduced.dtype)
+        operators = np.empty((history_indices.size, n, n), dtype=reduced.dtype)
         filtered = np.empty((n, steps), dtype=reduced.dtype)
         predicted = np.empty((n, steps), dtype=reduced.dtype)
-        operators[0], filtered[:, 0], predicted[:, 0] = A, x, x
+        filtered[:, 0], predicted[:, 0] = x, x
+        history_position = 0
+        if history_indices[0] == 0:
+            operators[0] = A
+            history_position = 1
 
         for k in range(1, steps):
             x_pred = A @ x
@@ -79,8 +104,12 @@ class EKFDMD:
             A = A + delta[n:].reshape(n, n)
             P = P_pred - K @ cross.T.conj()
             P = 0.5 * (P + P.T.conj())
-            operators[k], filtered[:, k], predicted[:, k] = A, x, x_pred
+            filtered[:, k], predicted[:, k] = x, x_pred
+            if history_position < history_indices.size and k == history_indices[history_position]:
+                operators[history_position] = A
+                history_position += 1
 
+        self.history_indices = history_indices
         self.operators = np.einsum("ij,tjk,lk->til", projection, operators, projection.conj())
         self.filtered_data = projection @ filtered
         self.predicted_data = projection @ predicted
@@ -109,6 +138,7 @@ class EKFDMDc(EKFDMD):
         projection = _basis(X, self.rank)
         reduced = projection.conj().T @ X
         n, steps = reduced.shape
+        history_indices = _history_indices(steps, self.history)
         m = U.shape[0]
         if self.initialize_with_dmd:
             A, B = _dmdc(reduced, U)
@@ -122,11 +152,15 @@ class EKFDMDc(EKFDMD):
         Q = csr_array((q, (np.arange(state_size), np.arange(state_size))), shape=(state_size, state_size))
         R = np.eye(n, dtype=reduced.dtype) * self.measurement_noise
 
-        operators = np.empty((steps, n, n), dtype=reduced.dtype)
-        controls = np.empty((steps, n, m), dtype=reduced.dtype)
+        operators = np.empty((history_indices.size, n, n), dtype=reduced.dtype)
+        controls = np.empty((history_indices.size, n, m), dtype=reduced.dtype)
         filtered = np.empty((n, steps), dtype=reduced.dtype)
         predicted = np.empty((n, steps), dtype=reduced.dtype)
-        operators[0], controls[0], filtered[:, 0], predicted[:, 0] = A, B, x, x
+        filtered[:, 0], predicted[:, 0] = x, x
+        history_position = 0
+        if history_indices[0] == 0:
+            operators[0], controls[0] = A, B
+            history_position = 1
 
         for k in range(1, steps):
             u = U[:, k - 1]
@@ -149,8 +183,12 @@ class EKFDMDc(EKFDMD):
             B = B + delta[n + n * n :].reshape(n, m)
             P = P_pred - K @ cross.T.conj()
             P = 0.5 * (P + P.T.conj())
-            operators[k], controls[k], filtered[:, k], predicted[:, k] = A, B, x, x_pred
+            filtered[:, k], predicted[:, k] = x, x_pred
+            if history_position < history_indices.size and k == history_indices[history_position]:
+                operators[history_position], controls[history_position] = A, B
+                history_position += 1
 
+        self.history_indices = history_indices
         self.operators = np.einsum("ij,tjk,lk->til", projection, operators, projection.conj())
         self.control_operators = np.einsum("ij,tjk->tik", projection, controls)
         self.filtered_data = projection @ filtered
