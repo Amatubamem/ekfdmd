@@ -2,11 +2,16 @@ from __future__ import annotations
 
 import argparse
 import multiprocessing as mp
+import os
 import statistics
 import subprocess
 import sys
 import time
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ALL_COMPLETED, ProcessPoolExecutor, wait
+
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
 
 import numpy as np
 
@@ -139,12 +144,13 @@ def _run_level(
                 )
 
             start = time.perf_counter()
-            while not all(future.done() for future in futures):
+            while True:
+                done, _ = wait(futures, timeout=monitor_interval if monitor_interval > 0 else None, return_when=ALL_COMPLETED)
                 memory = _gpu_memory_gib(device_id) if monitor_interval > 0 else None
                 if memory is not None:
                     peak_used = max(peak_used, memory[0])
-                if monitor_interval > 0:
-                    time.sleep(monitor_interval)
+                if len(done) == len(futures):
+                    break
             wall_time = time.perf_counter() - start
 
             memory = _gpu_memory_gib(device_id)
@@ -161,7 +167,6 @@ def _run_level(
     total_cases = concurrency * fits_per_worker if status == "ok" else len(worker_times) * fits_per_worker
     throughput = total_cases / wall_time if wall_time > 0 else 0.0
     median_worker_time = statistics.median(worker_times) if worker_times else 0.0
-    max_worker_time = max(worker_times, default=0.0)
     peak_delta = peak_used - baseline_used if np.isfinite(peak_used) and np.isfinite(baseline_used) else float("nan")
 
     return (
