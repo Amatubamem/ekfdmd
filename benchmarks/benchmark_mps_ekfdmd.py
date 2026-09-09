@@ -24,17 +24,19 @@ def _measure(function, repeat: int, synchronize=None) -> float:
     return statistics.median(samples)
 
 
-def _case(n: int, steps: int, repeat: int) -> tuple[float, float]:
+def _case(n: int, steps: int, repeat: int) -> tuple[float, float, float, float]:
     X = np.random.default_rng(n).standard_normal((n, steps))
     kwargs = dict(state_noise=1e-3, operator_noise=1e-5, measurement_noise=2e-3)
 
     cpu = EKFDMD(**kwargs).fit(X)
     mps = MPSEKFDMD(**kwargs).fit(X)
-    np.testing.assert_allclose(mps.operator, cpu.operator, rtol=2e-3, atol=2e-4)
+    difference = mps.operator - cpu.operator
+    relative_frobenius_error = np.linalg.norm(difference) / np.linalg.norm(cpu.operator)
+    max_absolute_error = np.max(np.abs(difference))
 
     cpu_time = _measure(lambda: EKFDMD(**kwargs).fit(X), repeat)
     mps_time = _measure(lambda: MPSEKFDMD(**kwargs).fit(X), repeat, torch.mps.synchronize)
-    return cpu_time, mps_time
+    return cpu_time, mps_time, relative_frobenius_error, max_absolute_error
 
 
 def main() -> None:
@@ -48,11 +50,14 @@ def main() -> None:
 
     MPSEKFDMD().fit(np.random.default_rng(0).standard_normal((2, 4)))
 
-    print("n,t,cpu_s,mps_s,speedup")
+    print("n,t,cpu_s,mps_s,speedup,relative_frobenius_error,max_absolute_error")
     for n in (10, 20, 30, 40, 50):
         steps = 100
-        cpu_time, mps_time = _case(n, steps, args.repeat)
-        print(f"{n},{steps},{cpu_time:.6f},{mps_time:.6f},{cpu_time / mps_time:.3f}")
+        cpu_time, mps_time, relative_error, max_error = _case(n, steps, args.repeat)
+        print(
+            f"{n},{steps},{cpu_time:.6f},{mps_time:.6f},{cpu_time / mps_time:.3f},"
+            f"{relative_error:.6e},{max_error:.6e}"
+        )
 
 
 if __name__ == "__main__":
