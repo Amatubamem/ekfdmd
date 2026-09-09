@@ -13,6 +13,7 @@ See [`examples/nonomura_2019.ipynb`](examples/nonomura_2019.ipynb) for a reprodu
 | Solver | Input | Main parameters | Purpose |
 | --- | --- | --- | --- |
 | `EKFDMD` | `X: (n, T)` | `state_noise`, `operator_noise`, `measurement_noise`, `rank` | EKF-based simultaneous state filtering and operator estimation |
+| `CuPyEKFDMD` | `X: (n, T)` | same as `EKFDMD` | CUDA implementation of EKF-DMD for explicit GPU execution |
 | `EKFDMDc` | `X: (n, T)`, `U: (m, T)` | same as `EKFDMD` | EKF-DMD with a known control input and estimated `A, B` |
 | `SlidingWindowDMD` | `X: (n, T)` | `window_size`, `svd_rank` | independent DMD fits on overlapping windows |
 | `SlidingWindowDMDc` | `X: (n, T)`, `U: (m, T)` | `window_size`, `svd_rank` | sliding-window DMD with control |
@@ -21,13 +22,25 @@ See [`examples/nonomura_2019.ipynb`](examples/nonomura_2019.ipynb) for a reprodu
 ## Installation
 
 ```sh
-pip install ekfdmd
+uv add ekfdmd
 ```
 
 Numba is optional. When installed, it accelerates the Online DMD update loop without changing the public API.
 
 ```sh
-pip install 'ekfdmd[numba]'
+uv add 'ekfdmd[numba]'
+```
+
+CUDA 12.x support is optional. The `cuda12` extra installs CuPy and the CUDA component wheels, so a system-wide CUDA Toolkit is not required when a compatible NVIDIA driver is already installed.
+
+```sh
+uv add 'ekfdmd[cuda12]'
+```
+
+For a source checkout, install the CUDA extra with:
+
+```sh
+uv sync --extra cuda12
 ```
 
 ## Usage
@@ -45,6 +58,18 @@ A_t = model.operators
 lambdas_t = model.eigs
 modes_t = model.modes
 x_next = model.predict(X[:, -1])
+```
+
+Use the CUDA backend explicitly when desired. Backend selection is not automatic because the CPU/GPU break-even point depends on the hardware and problem size. `CuPyEKFDMD` accepts NumPy input and returns NumPy arrays through the same data contract as `EKFDMD`.
+
+```python
+from ekfdmd.cupy import CuPyEKFDMD
+
+model = CuPyEKFDMD(
+    state_noise=1e-3,
+    measurement_noise=1e-2,
+    operator_noise=0.0,
+).fit(X)
 ```
 
 Controlled systems use the same `fit`-first interface:
