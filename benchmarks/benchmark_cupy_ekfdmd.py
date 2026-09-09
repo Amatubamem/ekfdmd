@@ -8,7 +8,7 @@ import cupy as cp
 import numpy as np
 
 from ekfdmd import EKFDMD
-from ekfdmd._cupy_experimental import CuPyEKFDMD
+from ekfdmd.cupy import CuPyEKFDMD
 
 
 def _measure(function, repeat: int, synchronize=None) -> float:
