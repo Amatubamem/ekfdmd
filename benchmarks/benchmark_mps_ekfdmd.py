@@ -8,7 +8,7 @@ import numpy as np
 import torch
 
 from ekfdmd import EKFDMD
-from ekfdmd._mps_experimental import MPSEKFDMD
+from ekfdmd.mps import MPSEKFDMD
 
 
 def _measure(function, repeat: int, synchronize=None) -> float:
