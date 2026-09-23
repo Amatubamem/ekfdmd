@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 
 import numpy as np
 
@@ -101,6 +102,18 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(sw.eigs.shape, (13, 1))
         self.assertEqual(sw.modes.shape, (13, 1, 1))
         self.assertIsInstance(SlidingWindowDMD(8).fit(autonomous).eigs, tuple)
+
+    def test_sliding_window_dmdc_falls_back_when_numpy_svd_does_not_converge(self):
+        A = np.array([[0.9]])
+        B = np.array([[0.1]])
+        U = np.cos(np.arange(20, dtype=float))[None, :]
+        X = trajectory(A, np.array([1.0]), 20, B, U)
+
+        with mock.patch("ekfdmd._dmd.np.linalg.svd", side_effect=np.linalg.LinAlgError("SVD did not converge")):
+            solver = SlidingWindowDMDc(8).fit(X, U)
+
+        np.testing.assert_allclose(solver.operator, A, atol=1e-12)
+        np.testing.assert_allclose(solver.control_operator, B, atol=1e-12)
 
     def test_online_dmd(self):
         A = np.array([[0.97, -0.04], [0.04, 0.97]])
