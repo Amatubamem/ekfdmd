@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+from scipy import linalg
 
 
 def _snapshots(array: np.ndarray, name: str = "X") -> np.ndarray:
@@ -12,6 +13,14 @@ def _snapshots(array: np.ndarray, name: str = "X") -> np.ndarray:
     if not np.issubdtype(array.dtype, np.number) or not np.all(np.isfinite(array)):
         raise ValueError(f"{name} must contain only finite numeric values.")
     return array.astype(np.result_type(array.dtype, np.float64), copy=False)
+
+
+def _svd(array: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Compute SVD with a robust LAPACK fallback for rare non-convergence."""
+    try:
+        return np.linalg.svd(array, full_matrices=False)
+    except np.linalg.LinAlgError:
+        return linalg.svd(array, full_matrices=False, lapack_driver="gesvd")
 
 
 def _rank(singular_values: np.ndarray, requested: int | None) -> int:
@@ -28,7 +37,7 @@ def _rank(singular_values: np.ndarray, requested: int | None) -> int:
 
 def _dmd(window: np.ndarray, svd_rank: int | None = None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     x, y = window[:, :-1], window[:, 1:]
-    u, s, vh = np.linalg.svd(x, full_matrices=False)
+    u, s, vh = _svd(x)
     rank = _rank(s, svd_rank)
     u, s, v = u[:, :rank], s[:rank], vh.conj().T[:, :rank]
     yvsi = (y @ v) / s
@@ -40,7 +49,7 @@ def _dmd(window: np.ndarray, svd_rank: int | None = None) -> tuple[np.ndarray, n
 def _dmdc(window: np.ndarray, controls: np.ndarray, svd_rank: int | None = None) -> tuple[np.ndarray, np.ndarray]:
     omega = np.vstack((window[:, :-1], controls[:, :-1]))
     target = window[:, 1:]
-    u, s, vh = np.linalg.svd(omega, full_matrices=False)
+    u, s, vh = _svd(omega)
     rank = _rank(s, svd_rank)
     gain = ((target @ vh.conj().T[:, :rank]) / s[:rank]) @ u[:, :rank].conj().T
     n = window.shape[0]
@@ -53,7 +62,7 @@ def _basis(data: np.ndarray, rank: int | None) -> np.ndarray:
         return np.eye(n, dtype=data.dtype)
     if not 1 <= rank < n:
         raise ValueError(f"rank must be between 1 and {n}.")
-    u, s, _ = np.linalg.svd(data[:, :-1], full_matrices=False)
+    u, s, _ = _svd(data[:, :-1])
     available = _rank(s, None)
     if rank > available:
         raise ValueError(f"rank={rank} exceeds the numerical snapshot rank ({available}).")
